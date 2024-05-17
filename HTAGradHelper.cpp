@@ -108,6 +108,7 @@ class StudentData {
     delete[] candidates;
   };
 
+  Student getStudentAtI(int index) { return studentList[index]; };
   int getListSize() { return totalGraduatingStuds; };
 };
 
@@ -115,11 +116,15 @@ class Staff {
  private:
   std::string name = "";
 
-  int maxStudentsThisPersonCanStole = 0;
-
   int studentListMaxSize = 0;
   int currentStudentCount = 0;
-  std::string* studentList = nullptr;  // dynamic array of student names
+  std::string* studentList = nullptr;  // dynamic array of wanted student names
+  
+
+  int maxStudentsThisPersonCanStole = 10;
+  // max size should be ^ maxStudentsThisPersonCanStole
+  int currentStudentMatchCount = 0;
+  std::string* matchedStudentsList = new std::string[maxStudentsThisPersonCanStole];  // dynamic array of matched students
 
  public:
 
@@ -132,13 +137,33 @@ class Staff {
   }
 
   void cinHowManyCanStole() {
-      std::cin >> maxStudentsThisPersonCanStole;
+    std::cin >> maxStudentsThisPersonCanStole;
+  }
+
+  void createMatchedStudentsList() {
+    delete[] matchedStudentsList;
+    matchedStudentsList = new std::string[maxStudentsThisPersonCanStole];
   }
 
   void addStudent(std::string name) {
     studentList[currentStudentCount] = name;
-    //std::cout << "added student: " << studentList[currentStudentCount] << '\n';
     ++currentStudentCount;
+  }
+
+  std::string getStudentAtI(int index) {
+    return studentList[index];
+  }
+
+  void addMatchedStudent(std::string name) {
+    if (currentStudentMatchCount < maxStudentsThisPersonCanStole) { // teacher is full prevent overflow
+      std::cout << currentStudentMatchCount;
+      matchedStudentsList[currentStudentMatchCount] = name;
+      ++currentStudentMatchCount;
+    }
+  }
+
+  bool teacherIsFullMatched() {
+    return currentStudentMatchCount >= maxStudentsThisPersonCanStole;
   }
 
   void createStudentStringList(int maxSize) {
@@ -307,7 +332,7 @@ void parseStaffFileToData(StaffData& staffData, std::string staffFilePath) {
       }
 
       Staff newStaff;
-      std::string staffFullName = firstName + ' ' + lastName;
+      std::string staffFullName = lastName + ' ' + firstName;
       newStaff.setName(staffFullName);
       newStaff.createStudentStringList(wantedStudentsCount);
 
@@ -459,7 +484,9 @@ void parseStudentFileToData(StudentData &studentData, std::string staffFilePath)
           removeQuotes(staffLastName);
           if (!staffFirstName.empty() && !staffLastName.empty()) {
             std::string staffFullName = staffLastName + ' ' + staffFirstName;
-            newStudent.selectedStaffs[incrementer] = staffFullName;
+            if (studentChoseStaffAmt > 0) {
+              newStudent.selectedStaffs[incrementer] = staffFullName;
+            }
             ++incrementer;
           }
         }
@@ -490,21 +517,84 @@ std::string askForFilePath() {
   return filePath;
 }
 
+bool existsInStringList(std::string fullName, std::string *theList, int size) {
+  for (int i = 0; i < size; ++i) {
+    if (fullName == theList[i]) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void pairStudentAndStaff(StaffData& staffData, StudentData& studentData) {
-  int listSize = staffData.getListSize();
-  for (int i = 0; i < listSize; ++i) {
-    Staff thisStaff = staffData.getStaff(i);
-    std::string firstThingy = std::to_string(i+1) + "/" + std::to_string(listSize);
-    std::cout << "#" << firstThingy;
-    std::cout << addSpaces(6 - firstThingy.length()) << "| #of students ";
-    setTxtColor(3);
-    std::cout << thisStaff.getName();
+  std::string secondInput = "";
+  do {
+    system("CLS");
+    std::cout << "  - student/staff pairing -\n\n"
+              << "[1] manually set #of students each staff can stole\n"
+              << "[2] force pair specified teacher with specified student\n";
+    setTxtColor(10);
+    std::cout << "[s]";
     setTxtColor(15);
-    std::cout << " can stole: ";
-    thisStaff.cinHowManyCanStole();
-  };
+    std::cout << " start pairing process\n "
+              << "\ninput: ";
+    std::cin >> secondInput;
+    if (secondInput == "1") {
+      int listSize = staffData.getListSize();
+      for (int i = 0; i < listSize; ++i) {
+        Staff thisStaff = staffData.getStaff(i);
+        std::string firstThingy =
+            std::to_string(i + 1) + "/" + std::to_string(listSize);
+        std::cout << "#" << firstThingy;
+        std::cout << addSpaces(6 - firstThingy.length()) << "| #of students ";
+        setTxtColor(3);
+        std::cout << thisStaff.getName();
+        setTxtColor(15);
+        std::cout << " can stole: ";
+        thisStaff.cinHowManyCanStole();
+        thisStaff.createMatchedStudentsList();
+      };
+      system("PAUSE");
+    } else if (secondInput == "2") {
+    }
+  } while (secondInput != "s");
+  // todo actual pairing here
+
+  int matchedStudentsI = 0;
+  std::string* alreadyMatchedStudens = new std::string[studentData.getListSize()]; // keep track of already matched students
+
+  for (int i = 0; i < staffData.getListSize(); ++i) {  // for each staff
+    Staff thisStaff = staffData.getStaff(i);
+    std::string thisStaffName = thisStaff.getName();
+    for (int j = 0; j < thisStaff.getMaxStudents(); ++j) { // for each wanted student
+      std::string attemptStudent = thisStaff.getStudentAtI(j);
+      if (existsInStringList(attemptStudent, alreadyMatchedStudens, matchedStudentsI) || thisStaff.teacherIsFullMatched()) {
+        continue;  // skip, student was already taken
+      }
+      for (int k = 0; k < studentData.getListSize(); ++k) { // for each of all graduating students
+        Student thisStud = studentData.getStudentAtI(k);
+        if (thisStud.fullName == attemptStudent) {
+          //std::cout << thisStaffName << " wanted student " << thisStud.fullName << " found\n";
+          bool matchFound = false; // make sure student wants that staff member too
+          for (int l = 0; l < thisStud.totalStaffSelected; ++l) {  // for each staff student selected
+            if (thisStud.selectedStaffs[l] == thisStaffName) {
+              matchFound = true;
+              break;
+            }
+          }
+          if (matchFound && !thisStaff.teacherIsFullMatched() && !existsInStringList(thisStud.fullName, alreadyMatchedStudens, matchedStudentsI)) {
+            std::cout << matchedStudentsI << " matched " << thisStaffName << " with " << thisStud.fullName << '\n';
+            thisStaff.addMatchedStudent(thisStud.fullName);
+
+            alreadyMatchedStudens[matchedStudentsI] = thisStud.fullName;
+            ++matchedStudentsI;
+          }
+        }
+      }
+    }
+  }
   system("PAUSE");
-};
+}
 
 int main() {
   std::cout << "\n[Initializing] HTA Grad Helper Program\n";
