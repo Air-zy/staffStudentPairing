@@ -507,7 +507,7 @@ void pairStudentAndStaff(StaffData& staffData, StudentData& studentData) {
 };
 
 int main() {
-  std::cout << "\n[Initializing] Program\n";
+  std::cout << "\n[Initializing] HTA Grad Helper Program\n";
   StaffData staffData;
   StudentData studentData;
 
@@ -533,7 +533,7 @@ int main() {
   std::string input = "";
   do {
     system("CLS");
-    std::cout << " - program menu - \n\n"
+    std::cout << " - grad halper menu - \n\n"
               << "[1] display all staff\n"
               << "[2] display all students\n"
               << "[3] calculate veritas results\n"
