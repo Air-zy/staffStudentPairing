@@ -1,10 +1,61 @@
 #include <iostream>
 #include <string>
 #include <windows.h>  // for console visuals
+#include <algorithm> // sorting and shuffling
+#include <random>    // for std::default_random_engine and std::random_device
 #include <fstream>
 
+#include <cstdlib> // for std::srand and std::rand
+#include <ctime>   // for std::time
+
 void setTxtColor(int colorValue);
+void toLowercase(std::string& input);
 std::string addSpaces(int amt);
+std::string addSpacesButCool(int amt, int visualSize);
+int getNumberDigitCount(int number) { return std::to_string(number).length(); }
+
+int compareStrings(std::string& str1, std::string& str2) {
+  std::sort(str1.begin(), str1.end());
+  std::sort(str2.begin(), str2.end());
+
+  int i = 0, j = 0;
+  int similarities = 0;
+
+  while (i < str1.length() && j < str2.length()) {
+    if (str1[i] == str2[j]) {
+      ++similarities;
+      ++i;
+      ++j;
+    } else if (str1[i] < str2[j]) {
+      ++i;
+    } else {
+      ++j;
+    }
+  }
+
+  int lessStrengthOnSize = (str1.length() + str2.length()) / 2;
+  int result = static_cast<int>(
+      (static_cast<double>(similarities) / lessStrengthOnSize) * 100);
+  return result;
+}
+
+
+// Globals
+static unsigned int global_seed_counter = 0;
+const std::string firstNameLastNameSeperator = ", ";
+
+std::mt19937 createRNG() {
+  // Increment the global seed counter
+  unsigned int counter_value = global_seed_counter++;
+
+  // Seed the random number generator with the current time and the counter value
+  std::srand(static_cast<unsigned int>(std::time(nullptr)) + counter_value);
+
+  // Create a random number generator
+  std::random_device rd;               // Obtain a random number from hardware
+  std::mt19937 g(rd() + std::rand());  // Seed the generato
+  return g;
+}
 
 struct Student {
   std::string fullName = "";
@@ -13,7 +64,10 @@ struct Student {
   std::string* selectedStaffs = nullptr;  // dynamic array of staff names
 
   std::string studentVoteForVeritas = ""; // name of vote
+  std::string matchedWithStaff = ""; // which staff the student was matched with
 };
+
+Student NULLSTUDENT = Student();
 
 class StudentData {
  private:
@@ -41,6 +95,10 @@ class StudentData {
     studentList[currentStudentCount] = stud;
     ++currentStudentCount;
   }
+  
+  void shuffleStudList() {
+    std::shuffle(studentList, studentList + totalGraduatingStuds, createRNG());
+  }
 
   void createStudentList(int maxSize) {
     totalGraduatingStuds = maxSize;
@@ -51,10 +109,11 @@ class StudentData {
     std::cout << "#   | FULLNAME | #STAFF SELECTED | VERIDAS CHOICE\n";
     for (int i = 0; i < totalGraduatingStuds; ++i) {
       Student& thisStudent = studentList[i];
-      std::cout << i+1 <<  addSpaces(4 - std::to_string(i+1).length())<< "| " << thisStudent.fullName
+      std::cout << i + 1 << addSpaces(4 - getNumberDigitCount(i + 1))
+                << "| " << thisStudent.fullName
                 << addSpaces(longestStudentName - thisStudent.fullName.length())
                 << " | " << thisStudent.totalStaffSelected
-                << addSpaces(4 - std::to_string(thisStudent.totalStaffSelected).length())
+                << addSpaces(4 - getNumberDigitCount(thisStudent.totalStaffSelected))
                 << "| " << thisStudent.studentVoteForVeritas << '\n';
     }
   }
@@ -97,7 +156,7 @@ class StudentData {
     // results
     std::cout << "  - Veritas Results - \n";
     for (int i = 0; i < candidateCount; ++i) {
-        double percentage = (candidates[i].votes / static_cast<double>(candidateCount)) * 100;
+      double percentage = (candidates[i].votes / static_cast<double>(candidateCount)) * 100;
       std::cout << candidates[i].studentFullName
                 << addSpaces(longestStudentName - candidates[i].studentFullName.length())
                 << ": " << candidates[i].votes << " votes (" << percentage
@@ -108,41 +167,64 @@ class StudentData {
     delete[] candidates;
   };
 
-  Student getStudentAtI(int index) { return studentList[index]; };
+  Student& getStudentAtI(int index) { return studentList[index]; };
+  Student& getStudentFromName(std::string name) {
+    for (int i = 0; i < totalGraduatingStuds; ++i) {
+      Student& thisStudent = studentList[i];
+      if (thisStudent.fullName == name) {
+        return thisStudent;
+      }
+    }
+    return NULLSTUDENT;
+  };
   int getListSize() { return totalGraduatingStuds; };
 };
 
 class Staff {
  private:
+  int popularity = 0; // how many times they are found on student list
   std::string name = "";
 
   int studentListMaxSize = 0;
   int currentStudentCount = 0;
   std::string* studentList = nullptr;  // dynamic array of wanted student names
-  
 
-  int maxStudentsThisPersonCanStole = 10;
+
+  int maxStudentsThisPersonCanStole = 100;
   // max size should be ^ maxStudentsThisPersonCanStole
   int currentStudentMatchCount = 0;
-  std::string* matchedStudentsList = new std::string[maxStudentsThisPersonCanStole];  // dynamic array of matched students
+  std::string* matchedStudentsList = nullptr;  // dynamic array of matched students
 
  public:
 
   // Constructor
-  Staff() {}
+   Staff() {}
 
   // Destructor
   ~Staff() {
     // strings deallocate themselves already so no need to delete string list
   }
 
-  void cinHowManyCanStole() {
-    std::cin >> maxStudentsThisPersonCanStole;
+  void shuffleStudList() {
+    // Shuffle the array
+    std::shuffle(studentList, studentList + currentStudentCount, createRNG());
   }
 
-  void createMatchedStudentsList() {
-    delete[] matchedStudentsList;
+  void updateMatchedStudentsList(int matchStudentListSize, StudentData &studentData) {
+    if (matchedStudentsList != nullptr){
+      for (int i = 0; i < currentStudentMatchCount; ++i) {
+        Student& foundStud = studentData.getStudentFromName(matchedStudentsList[i]);
+        foundStud.matchedWithStaff = ""; // clear matched staff
+      }
+      delete[] matchedStudentsList;
+      matchedStudentsList = nullptr;
+    }
+    maxStudentsThisPersonCanStole = 0;  //  reset
+    currentStudentMatchCount = 0;
+
+    maxStudentsThisPersonCanStole = matchStudentListSize;
     matchedStudentsList = new std::string[maxStudentsThisPersonCanStole];
+    //std::cout << "set " << name << " maxcanstole: " << maxStudentsThisPersonCanStole << '\n';
   }
 
   void addStudent(std::string name) {
@@ -156,7 +238,14 @@ class Staff {
 
   void addMatchedStudent(std::string name) {
     if (currentStudentMatchCount < maxStudentsThisPersonCanStole) { // teacher is full prevent overflow
-      std::cout << currentStudentMatchCount;
+      if (matchedStudentsList == nullptr) {
+          matchedStudentsList = new std::string[maxStudentsThisPersonCanStole];
+      }
+      for (int i = 0; i < currentStudentMatchCount; ++i) {
+        if (name == matchedStudentsList[i]) { // if already in match list
+          return;
+        }
+      }
       matchedStudentsList[currentStudentMatchCount] = name;
       ++currentStudentMatchCount;
     }
@@ -172,9 +261,19 @@ class Staff {
   }
 
   void setName(std::string &newName) { name = newName; };
-  int getMaxStudents() { return studentListMaxSize; };
+  void setPopularity(int newpop) {
+    popularity = newpop;
+  };
+  int getPopularity() { return popularity; };
+  int getMaxSelectedStuds() { return studentListMaxSize; };
+  int getMaxMatchingStudents() { return maxStudentsThisPersonCanStole; };
+  int getAmtOfMatchedStudents() { return currentStudentMatchCount; };
+  std::string getMatchedStudentAtI(int index) { return matchedStudentsList[index]; };
   std::string getName() { return name; };
 };
+
+
+Staff NULLSTAFF = Staff();
 
 class StaffData {
  private:
@@ -195,43 +294,178 @@ class StaffData {
     staffList = nullptr;
   }
 
+  void sortStaffIndexs() {
+    std::sort(staffList, staffList + currentSize, [](Staff& a, Staff& b) {
+      return (a.getAmtOfMatchedStudents() - a.getPopularity() - a.getMaxMatchingStudents()) <
+            (b.getAmtOfMatchedStudents() - b.getPopularity() - b.getMaxMatchingStudents());
+    });
+  }
+
+  void sortStaffIndexsForEquality() {
+    std::sort(staffList, staffList + currentSize, [](Staff& a, Staff& b) {
+      return a.getAmtOfMatchedStudents() + a.getPopularity() <
+             b.getAmtOfMatchedStudents() + b.getPopularity();
+    });
+  }
+
+  void sortStaffIndexsByPopularity() { // sort by popularity first
+    std::sort(staffList, staffList + currentSize, [](Staff& a, Staff& b) {
+        return a.getPopularity() > b.getPopularity();
+    });
+  }
+
+  void sortByAmtStolling() {
+    std::sort(staffList, staffList + currentSize, [](Staff& a, Staff& b) {
+      return a.getAmtOfMatchedStudents() > b.getAmtOfMatchedStudents();
+    });
+  }
+
   void addStaff(Staff &newStaff) {
     staffList[currentSize] = newStaff;
+    if (newStaff.getName().empty()) {
+      std::cout << "[ERROR PARSING] staff csv, STAFF NAME IS EMPTY?" << '\n';
+      exit(1);
+    }
     if (newStaff.getName().length() > longestStaffName) {
       longestStaffName = newStaff.getName().length();
     }
     ++currentSize;
   }
-  
-  void printAllStaff() {
-    std::cout << "________________________________________________________\n";
-    setTxtColor(12);
-    std::cout << " STAFF LIST";
-    setTxtColor(15);
-    std::cout << " |" << addSpaces(longestStaffName / 2 - 7);
-    setTxtColor(12);
-    std::cout << "staff full name";
-    setTxtColor(15);
-    std::cout << addSpaces(longestStaffName / 2 - 7);
-    std::cout << "  | ";
-    setTxtColor(12);
-    std::cout << "#of chosen students ";
-    setTxtColor(15);
-    std::cout << "\n";
+
+  void printPairings(StudentData& studentData) {
+    int totalStudentsCount = studentData.getListSize();
+    int pairedStudentsCounter = 0;
+    std::cout << "\ntotal student count: " << totalStudentsCount << "\n";
+    std::cout << "total staff count: " << currentSize << "\n\n";
+    sortByAmtStolling();
     for (int i = 0; i < currentSize; ++i) {
       Staff& thisStaff = staffList[i];
-      std::cout << "  staff #" << i + 1
-                << addSpaces(3 - std::to_string(i + 1).length()) << "| "
-                << thisStaff.getName()
-                << addSpaces(longestStaffName - thisStaff.getName().length());
-      std::cout << " |  " << thisStaff.getMaxStudents();
+      int thisStaffMaxMatchedStudents = thisStaff.getMaxMatchingStudents();
+      int thisStaffAmtOfMatchStudents = thisStaff.getAmtOfMatchedStudents();
+      setTxtColor(8);
+      std::cout << "staff #" << i + 1;
+      setTxtColor(15);
+      std::cout << addSpaces(3 - getNumberDigitCount(i + 1)) << "[ ";
+      if (thisStaffAmtOfMatchStudents <= 0) {
+        setTxtColor(12);
+      } else if (thisStaffAmtOfMatchStudents == thisStaffMaxMatchedStudents) {
+        setTxtColor(1);
+      } else {
+        setTxtColor(11);
+      }
+      std::cout << thisStaff.getName();
+      setTxtColor(15);
+      std::cout << " ]: ";
+      setTxtColor(8);
+      //std::cout << thisStaffAmtOfMatchStudents << "/" << thisStaffMaxMatchedStudents << " students to stole: \n";
+      std::cout << "\n";
+      int previousStaffStudentNameLength = 10;
+      int studentsPerRow = 3;
+      if (thisStaffAmtOfMatchStudents < 5) {
+        studentsPerRow = 2;
+      }
+      setTxtColor(7);
+      for (int j = 0; j < thisStaffAmtOfMatchStudents; ++j) {
+        std::cout << addSpaces(20 - previousStaffStudentNameLength);
+        setTxtColor(8);
+        std::cout << "- ";
+        setTxtColor(7);
+        std::cout << thisStaff.getMatchedStudentAtI(j);
+        previousStaffStudentNameLength = thisStaff.getMatchedStudentAtI(j).length();
+        ++pairedStudentsCounter;
+        if (((j+1)%studentsPerRow) == 0 || j == thisStaffAmtOfMatchStudents-1) {
+          std::cout << "\n";
+          previousStaffStudentNameLength = 10;
+        }
+      }
+      setTxtColor(15);
+      std::cout << "\n";
+    }
+
+    std::cout << "\ntotal students paired = (";
+    setTxtColor(10);
+    std::cout << pairedStudentsCounter << " / " << totalStudentsCount;
+    setTxtColor(15);
+    double percentage = (static_cast<double>(pairedStudentsCounter) / totalStudentsCount) * 100.0;
+    std::cout << ") " << percentage << "%\n ";
+
+    int totalUnairedStudentCount = 0;
+    // loop to count total unpaired students
+    for (int k = 0; k < studentData.getListSize(); ++k) {  // for each of all graduating students
+      Student& thisStud = studentData.getStudentAtI(k);
+      if (thisStud.matchedWithStaff == "" || thisStud.matchedWithStaff.empty()) {
+        ++totalUnairedStudentCount;
+      }
+    }
+
+    std::cout << "\n - [" << totalUnairedStudentCount << " UNPAIRED STUDENTS] - \n";
+    for (int k = 0; k < studentData.getListSize(); ++k) {  // for each of all graduating students
+      Student& thisStud = studentData.getStudentAtI(k);
+      if (thisStud.matchedWithStaff == "" || thisStud.matchedWithStaff.empty()) {
+        std::cout << "[";
+        setTxtColor(12);
+        std::cout << thisStud.fullName;
+        setTxtColor(15);
+        std::cout << "] ";
+        setTxtColor(8);
+        std::cout << "chose " << thisStud.totalStaffSelected << " staff members " << '\n';
+        setTxtColor(15);
+      }
+    }
+  }
+
+  void printAllStaff() {
+    std::cout << "________________________________________________________________________________________________________\n";
+    setTxtColor(14);
+    std::cout << " STAFF LIST";
+    setTxtColor(15);
+    std::cout << " | ";
+    setTxtColor(14);
+    std::cout << "staff full name";
+    setTxtColor(15);
+    std::cout << addSpaces(25-longestStaffName);
+    std::cout << " | ";
+    setTxtColor(14);
+    std::cout << "#selected students | max can stole | #students stolling | popularity";
+    setTxtColor(15);
+    std::cout << "\n";
+
+    sortByAmtStolling();
+    for (int i = 0; i < currentSize; ++i) {
+      Staff& thisStaff = staffList[i];
+      std::cout << "  staff #" << i + 1 << addSpaces(3 - getNumberDigitCount(i + 1)) << "| ";
+      int thisStaffAmtOfMatchStudents = thisStaff.getAmtOfMatchedStudents();
+      int thisStaffMaxMatchedStudents = thisStaff.getMaxMatchingStudents();
+      if (thisStaffAmtOfMatchStudents <= 0) {
+        setTxtColor(12);
+      } else if (thisStaffMaxMatchedStudents == thisStaffAmtOfMatchStudents) {
+        setTxtColor(1);
+      } else {
+        setTxtColor(11);
+      }
+      std::cout << thisStaff.getName();
+      setTxtColor(15);
+      std::cout << addSpaces(longestStaffName - thisStaff.getName().length());
+      std::cout << " | " << thisStaff.getMaxSelectedStuds() << addSpaces(18-getNumberDigitCount(thisStaff.getMaxSelectedStuds())) << " | "
+                << thisStaffMaxMatchedStudents << addSpaces(13-getNumberDigitCount(thisStaffMaxMatchedStudents)) << " | "
+                << thisStaffAmtOfMatchStudents << " " << addSpacesButCool(17-getNumberDigitCount(thisStaffAmtOfMatchStudents), thisStaffAmtOfMatchStudents) << " | "
+                << thisStaff.getPopularity();
       std::cout << '\n';
     };
   };
 
   // gets
   int getListSize() const { return currentSize; }
-  Staff getStaff(int index) const { return staffList[index]; };
+  Staff& getStaff(int index) const { return staffList[index]; };
+  Staff& getStaffFromName(std::string staffFullName) const {
+    for (int i = 0; i < currentSize; ++i) {
+      Staff& thisStaff = staffList[i];
+      if (thisStaff.getName() == staffFullName) {
+        return thisStaff;
+      }
+    }
+    return NULLSTAFF;
+  };
 };
 
 // remove quotes
@@ -243,6 +477,22 @@ void removeQuotes(std::string& str) {
     str.pop_back();
   }
 };
+
+void replaceHyphens(std::string& str) {
+  size_t pos = 0;
+  while ((pos = str.find('-')) != std::string::npos) {
+    str[pos] = ' ';
+  }
+}
+
+void keepFirstWord(std::string& str) {
+    // find the position of the first space in the string
+    size_t pos = str.find(' ');
+    if (pos != std::string::npos) {
+        // erase everything after the first space
+        str.erase(pos);
+    }
+}
 
 void removeWhitespace(std::string& str) {
   // remove leading whitespace
@@ -326,13 +576,28 @@ void parseStaffFileToData(StaffData& staffData, std::string staffFilePath) {
         removeQuotes(studentFirstName);
         removeWhitespace(studentLastName);
         removeQuotes(studentLastName);
+
+        replaceHyphens(studentFirstName);
+        keepFirstWord(studentFirstName);
+        replaceHyphens(studentLastName);
+        keepFirstWord(studentLastName);
+
         if (!studentFirstName.empty() && !studentLastName.empty()) {
           ++wantedStudentsCount;
         }
       }
 
       Staff newStaff;
-      std::string staffFullName = lastName + ' ' + firstName;
+      removeWhitespace(firstName);
+      removeQuotes(firstName);
+      removeWhitespace(lastName);
+      removeQuotes(lastName);
+
+      replaceHyphens(firstName);
+      keepFirstWord(firstName);
+      replaceHyphens(lastName);
+      keepFirstWord(lastName);
+      std::string staffFullName = lastName + firstNameLastNameSeperator + firstName;
       newStaff.setName(staffFullName);
       newStaff.createStudentStringList(wantedStudentsCount);
 
@@ -348,15 +613,21 @@ void parseStaffFileToData(StaffData& staffData, std::string staffFilePath) {
         removeQuotes(studentFirstName);
         removeWhitespace(studentLastName);
         removeQuotes(studentLastName);
+
+        replaceHyphens(studentFirstName);
+        keepFirstWord(studentFirstName);
+        replaceHyphens(studentLastName);
+        keepFirstWord(studentLastName);
         if (!studentFirstName.empty() && !studentLastName.empty()) {
-          std::string studentFullName = studentLastName + ' ' + studentFirstName;
+          std::string studentFullName = studentLastName + firstNameLastNameSeperator + studentFirstName;
           newStaff.addStudent(studentFullName);
           ++countingStuds;
         }
       }
 
       staffData.addStaff(newStaff);
-      delete[] words;  // free
+      // not needed
+      //delete[] words;  // free
     }
   }
   setTxtColor(10);
@@ -403,11 +674,18 @@ void parseStudentFileToData(StudentData &studentData, std::string staffFilePath)
       removeQuotes(firstName);
       removeWhitespace(lastName);
       removeQuotes(lastName);
+
+      replaceHyphens(firstName);
+      keepFirstWord(firstName);
+      replaceHyphens(lastName);
+      keepFirstWord(lastName);
+
       if (!firstName.empty() && !lastName.empty()) {
         ++studentCounter;
       }
-     
-      delete[] words;  // free
+
+      // not needed
+      // delete[] words;  // free
     }
   }
 
@@ -434,8 +712,14 @@ void parseStudentFileToData(StudentData &studentData, std::string staffFilePath)
       removeQuotes(firstName);
       removeWhitespace(lastName);
       removeQuotes(lastName);
+
+      replaceHyphens(firstName);
+      keepFirstWord(firstName);
+      replaceHyphens(lastName);
+      keepFirstWord(lastName);
+
       if (!firstName.empty() && !lastName.empty()) {
-        std::string studentFullName = lastName + ' ' + firstName;
+        std::string studentFullName = lastName + firstNameLastNameSeperator + firstName;
         Student newStudent;
         newStudent.fullName = studentFullName;
 
@@ -445,7 +729,12 @@ void parseStudentFileToData(StudentData &studentData, std::string staffFilePath)
         removeQuotes(veritasFirstName);
         removeWhitespace(veritasLastName);
         removeQuotes(veritasLastName);
-        std::string veritasWielder = veritasLastName + ' ' + veritasFirstName;
+
+        replaceHyphens(veritasFirstName);
+        keepFirstWord(veritasFirstName);
+        replaceHyphens(veritasLastName);
+        keepFirstWord(veritasLastName);
+        std::string veritasWielder = veritasLastName + firstNameLastNameSeperator + veritasFirstName;
         int veridasExistanceAdjust = 0;
         if (!veritasFirstName.empty() && !veritasLastName.empty()) {
           veridasExistanceAdjust = 2; // skip the last 2 words for adding to staff list so it wont add veritas wielder into the students staff list
@@ -463,7 +752,7 @@ void parseStudentFileToData(StudentData &studentData, std::string staffFilePath)
           removeQuotes(staffFirstName);
           removeWhitespace(staffLastName);
           removeQuotes(staffLastName);
-          //std::string staffFullName = staffLastName + ' ' + staffFirstName;
+          //std::string staffFullName = staffLastName + firstNameLastNameSeperator + staffFirstName;
           if (!staffFirstName.empty() && !staffLastName.empty()) {
             ++studentChoseStaffAmt;
           }
@@ -482,8 +771,13 @@ void parseStudentFileToData(StudentData &studentData, std::string staffFilePath)
           removeQuotes(staffFirstName);
           removeWhitespace(staffLastName);
           removeQuotes(staffLastName);
+
+          replaceHyphens(staffFirstName);
+          keepFirstWord(staffFirstName);
+          replaceHyphens(staffLastName);
+          keepFirstWord(staffLastName);
           if (!staffFirstName.empty() && !staffLastName.empty()) {
-            std::string staffFullName = staffLastName + ' ' + staffFirstName;
+            std::string staffFullName = staffLastName + firstNameLastNameSeperator + staffFirstName;
             if (studentChoseStaffAmt > 0) {
               newStudent.selectedStaffs[incrementer] = staffFullName;
             }
@@ -494,7 +788,8 @@ void parseStudentFileToData(StudentData &studentData, std::string staffFilePath)
         studentData.addStudent(newStudent);
       }
 
-      delete[] words;  // free
+      // not needed
+      // delete[] words;  // free
     }
   }
 
@@ -526,65 +821,357 @@ bool existsInStringList(std::string fullName, std::string *theList, int size) {
   return false;
 }
 
+std::string findSimilarLowCaseInStringList(std::string fullName, std::string* theList, int size) {
+  for (int i = 0; i < size; ++i) {
+    std::string listIFullName = theList[i];
+    toLowercase(listIFullName);
+    if (fullName == listIFullName) {
+      return theList[i];
+    }
+  }
+  return "";
+}
+
+std::string findSimilarLastNameInStringList(std::string lastName, std::string* theList, int size) {
+  for (int i = 0; i < size; ++i) {
+    std::string listIFullName = theList[i];
+    std::string IlastName = listIFullName;
+    keepFirstWord(IlastName);
+    if (lastName == IlastName) {
+      return theList[i];
+    }
+  }
+  return "";
+}
+
+std::string findSimilarFirstNameInStringList(std::string firstName, std::string* theList, int size) {
+  for (int i = 0; i < size; ++i) {
+    std::string listIFullName = theList[i];
+    std::string IFirstName = listIFullName.substr(listIFullName.find(' ') + 1);;
+    keepFirstWord(IFirstName);
+    if (firstName == IFirstName) {
+      return theList[i];
+    }
+  }
+  return "";
+}
+
+std::string finstClosestSimilarInList(std::string fullName, std::string* theList, int size) {
+  int closest = 0;
+  std::string mostSim = "";
+  for (int i = 0; i < size; ++i) {
+    std::string lowercaseIFullName = theList[i];
+    toLowercase(lowercaseIFullName);
+    int thisClosest = compareStrings(fullName, lowercaseIFullName);
+    if (thisClosest > closest) {
+      mostSim = theList[i];
+      closest = thisClosest;
+    }
+  }
+  return mostSim;
+}
+
+void locateMistakes(StaffData& staffData, StudentData& studentData) {
+  std::cout << "\n[finding mistakes]...\n";
+  int currentStudI = 0;
+  int currentStafI = 0;
+  int maxStudListSize = studentData.getListSize();
+  int maxStaffListSize = staffData.getListSize();
+
+  std::string* allOfTeacherWantedStudents = new std::string[maxStudListSize];
+  std::string* allOfStudentwantedTeachers = new std::string[maxStudListSize];
+
+  for (int i = 0; i < maxStaffListSize; ++i) {  // for each (staff)
+    Staff& thisStaff = staffData.getStaff(i);
+    for (int j = 0; j < thisStaff.getMaxSelectedStuds(); ++j) {  // for each wanted student
+      std::string attemptStudent = thisStaff.getStudentAtI(j);
+      if (!existsInStringList(attemptStudent, allOfTeacherWantedStudents, currentStudI)) {
+        allOfTeacherWantedStudents[currentStudI] = attemptStudent;
+        ++currentStudI;
+      }
+    };
+  }
+
+  for (int i = 0; i < maxStudListSize; ++i) {  // for each (student)
+    Student& thisStudent = studentData.getStudentAtI(i);
+    for (int j = 0; j < thisStudent.totalStaffSelected; ++j) {  // for each (wanted staff)
+      std::string selectedStaff = thisStudent.selectedStaffs[j];
+      Staff& actualSelectedStaff = staffData.getStaffFromName(selectedStaff);
+      if (actualSelectedStaff.getName() != NULLSTAFF.getName()) {
+        actualSelectedStaff.setPopularity(actualSelectedStaff.getPopularity() + 1);
+      } 
+      if (!existsInStringList(selectedStaff, allOfStudentwantedTeachers, currentStafI) && currentStafI < maxStudListSize) {
+        if (actualSelectedStaff.getName() == NULLSTAFF.getName()) { // was not found on staff list
+          std::cout << "(";
+          setTxtColor(12);
+          std::cout << selectedStaff;
+          setTxtColor(15);
+          std::cout << ") was not found on staff list\n";
+        }
+        allOfStudentwantedTeachers[currentStafI] = selectedStaff;
+        ++currentStafI;
+      }
+    }
+  }
+
+  for (int k = 0; k < maxStudListSize; ++k) {  // for each of all (graduating students)
+    Student thisStud = studentData.getStudentAtI(k);
+    std::string studFullName = thisStud.fullName;
+    if (!existsInStringList(studFullName, allOfTeacherWantedStudents, currentStudI)) {
+      std::string firstName = studFullName.substr(studFullName.find(' ') + 1);
+      std::string lastName = studFullName;
+      keepFirstWord(lastName);
+
+      std::cout << "[name error]: (";
+      setTxtColor(12);
+      std::cout << thisStud.fullName;
+      setTxtColor(15);
+      std::cout << ") from list of students was not found on any of the "
+                   "teachers selected students list\n";
+
+      std::string lowCaseFullName = studFullName;
+      toLowercase(lowCaseFullName);
+
+      std::string foundSimilarToLowerCase = findSimilarLowCaseInStringList(lowCaseFullName, allOfTeacherWantedStudents, currentStudI);
+      std::string foundSimilarLastName = findSimilarLastNameInStringList(lastName, allOfTeacherWantedStudents, currentStudI);
+      if (foundSimilarToLowerCase != "" && !foundSimilarToLowerCase.empty()) {
+        std::cout << "  - same last names different cases: ";
+        setTxtColor(3);
+        std::cout << foundSimilarToLowerCase;
+        setTxtColor(15);
+        std::cout << "\n\n";
+      } else if (foundSimilarLastName != "" && !foundSimilarLastName.empty()) {
+        std::cout << "  - found student with same last name: ";
+        setTxtColor(3);
+        std::cout << foundSimilarLastName;
+        setTxtColor(15);
+        std::cout << "\n\n";
+      } else {
+        // idk
+        std::string foundSimilarFirstName = findSimilarFirstNameInStringList( firstName, allOfTeacherWantedStudents, currentStudI);
+        if (foundSimilarFirstName != "" && !foundSimilarFirstName.empty()) {
+          std::cout << "  - found student with same first name: ";
+          setTxtColor(3);
+          std::cout << foundSimilarFirstName;
+          setTxtColor(15);
+          std::cout << "\n\n";
+        } else {
+          std::string MostSimilar = finstClosestSimilarInList( lowCaseFullName, allOfTeacherWantedStudents, currentStudI);
+          std::cout << "  ~ similar? to: ";
+          setTxtColor(8);
+          std::cout << MostSimilar;
+          setTxtColor(15);
+          std::cout << "\n\n";
+        }
+      }
+    }
+  }
+
+  for (int k = 0; k < maxStaffListSize; ++k) { // for each teachers student selected
+    Staff& thisStaff = staffData.getStaff(k);
+    std::string staffName = thisStaff.getName();
+    if (!existsInStringList(staffName, allOfStudentwantedTeachers, currentStafI)) {
+      std::string lastName = staffName;
+      std::string firstName = staffName.substr(staffName.find(' ') + 1);
+      keepFirstWord(lastName);
+      std::string foundWithSameLastName = findSimilarLastNameInStringList(lastName, allOfStudentwantedTeachers, currentStafI);
+      std::string foundWithSameFirstName = findSimilarFirstNameInStringList(firstName, allOfStudentwantedTeachers, currentStafI);
+      if (!foundWithSameLastName.empty()) {
+        std::cout << "(";
+        setTxtColor(4);
+        std::cout << staffName;
+        setTxtColor(15);
+        std::cout << ") was not found on students lists\n";
+        std::cout << "  - found same last names: ";
+        setTxtColor(3);
+        std::cout << foundWithSameLastName;
+        setTxtColor(15);
+        std::cout << "\n\n";
+      } else if (!foundWithSameFirstName.empty()) {
+        std::cout << "(";
+        setTxtColor(4);
+        std::cout << staffName;
+        setTxtColor(15);
+        std::cout << ") was not found on students lists\n";
+        std::cout << "  - found same first names: ";
+        setTxtColor(3);
+        std::cout << foundWithSameFirstName;
+        setTxtColor(15);
+        std::cout << "\n\n";
+      } else {
+        std::cout << "(";
+        setTxtColor(6);
+        std::cout << staffName;
+        setTxtColor(15);
+        std::cout << ") noone chose this staff\n";
+      }
+    }
+  }
+}
+
+void setupWaves(StaffData& staffData, StudentData& studentData) {
+  int maxStaffPerLine = 0;
+  system("CLS");
+  std::cout << "enter max staff per line: ";
+  std::cin >> maxStaffPerLine;
+}
+
 void pairStudentAndStaff(StaffData& staffData, StudentData& studentData) {
+  int listSize = staffData.getListSize();
+  for (int i = 0; i < listSize; ++i) {
+    Staff& thisStaff = staffData.getStaff(i);
+    thisStaff.updateMatchedStudentsList(thisStaff.getMaxMatchingStudents(), studentData);
+  };
+
   std::string secondInput = "";
   do {
     system("CLS");
     std::cout << "  - student/staff pairing -\n\n"
-              << "[1] manually set #of students each staff can stole\n"
-              << "[2] force pair specified teacher with specified student\n";
+              << "[1] force pair specified teacher with specified student\n"
+              << "[2] set #of students of staff by POPULARITY\n"
+              << "[3] manually set #of students for each staff can stole";
+    setTxtColor(8);
+    std::cout << " (tedious)\n";
+    setTxtColor(15);
     setTxtColor(10);
     std::cout << "[s]";
     setTxtColor(15);
     std::cout << " start pairing process\n "
               << "\ninput: ";
     std::cin >> secondInput;
-    if (secondInput == "1") {
+    if (secondInput == "3") {
       int listSize = staffData.getListSize();
       for (int i = 0; i < listSize; ++i) {
-        Staff thisStaff = staffData.getStaff(i);
-        std::string firstThingy =
-            std::to_string(i + 1) + "/" + std::to_string(listSize);
+        Staff &thisStaff = staffData.getStaff(i);
+        std::string firstThingy = std::to_string(i + 1) + "/" + std::to_string(listSize);
         std::cout << "#" << firstThingy;
         std::cout << addSpaces(6 - firstThingy.length()) << "| #of students ";
         setTxtColor(3);
         std::cout << thisStaff.getName();
         setTxtColor(15);
         std::cout << " can stole: ";
-        thisStaff.cinHowManyCanStole();
-        thisStaff.createMatchedStudentsList();
+        int askedSize = 0;
+        std::cin >> askedSize;
+        thisStaff.updateMatchedStudentsList(askedSize, studentData);
       };
       system("PAUSE");
+    } else if (secondInput == "1") {
+      std::string staffInput = "";
+      std::string studentInput = "";
+      std::cout << "enter staff full name(last, first): ";
+      std::cin.ignore(1000, '\n');  // flush the buffer
+      std::getline(std::cin, staffInput);
+      Staff& thisStaff = staffData.getStaffFromName(staffInput);
+      if (thisStaff.getName() != NULLSTAFF.getName()) {
+        std::cout << "staff #selected studs: " << thisStaff.getMaxSelectedStuds() << "\n";
+        std::cout << "enter student full name(last, first): ";
+        std::getline(std::cin, studentInput);
+        Student& thisStudent = studentData.getStudentFromName(studentInput);
+        if (thisStudent.fullName != NULLSTUDENT.fullName) {
+          thisStudent.matchedWithStaff = thisStaff.getName();
+          thisStaff.addMatchedStudent(studentInput);
+        } else {
+          std::cout << "[Error] student (" << studentInput << ") was not found\n";
+        }
+      } else {
+        std::cout << "[Error] staff (" << staffInput << ") was not found\n";
+      }
+      system("PAUSE");
     } else if (secondInput == "2") {
+      int listSize = staffData.getListSize();
+      int top = 0;
+      int next = 0;
+      int bottom = 0;
+
+      int topIndex = 0;
+      int nextIndex = 0;
+      std::cout << " - Top ";
+      std::cin >> topIndex;
+      std::cout << " requested staff will stole #of students: ";
+      std::cin >> top;
+      std::cout << " - Next ";
+      std::cin >> nextIndex;
+      std::cout << " requested staff will stole #of students: ";
+      std::cin >> next;
+      std::cout << " - Bottom " << (listSize-(topIndex+nextIndex)) << "\n requested staff will stole #of students: ";
+      std::cin >> bottom;
+
+      staffData.sortStaffIndexsByPopularity();
+      for (int i = 0; i < listSize; ++i) {
+        Staff& thisStaff = staffData.getStaff(i);
+        if (i < topIndex) {  // top
+          thisStaff.updateMatchedStudentsList(top, studentData);
+        } else if (i < topIndex + nextIndex) {  // next
+          thisStaff.updateMatchedStudentsList(next, studentData);
+        } else { // last
+          thisStaff.updateMatchedStudentsList(bottom, studentData);
+        }
+      }
     }
   } while (secondInput != "s");
-  // todo actual pairing here
+  
+  system("CLS");
+  int equalityBias = 1;
+  std::cout << "1 = prioratizes popular staff\n"
+            << "20 = equally gives staff same amt of students\n"
+            << "(1-20) - 15 is preffered\ninput (equality bias): ";
+  std::cin >> equalityBias;
+  if (equalityBias < 1) {
+    equalityBias = 1;
+  }
 
+  int cycleIncrement = 1;
+  // multiple cycles to make sure all possible pairs are paired
+  for (int cycle = 0; cycle < 1000; cycle+=cycleIncrement) { // two cycles, first only fits <= minPossiblNeededStudsForEachStaff then second cycle fills in all the other students
+  if (equalityBias > 14) {
+    staffData.sortStaffIndexsForEquality();
+  } else {
+    staffData.sortStaffIndexs();
+  }
+  //++cycleIncrement;
   int matchedStudentsI = 0;
-  std::string* alreadyMatchedStudens = new std::string[studentData.getListSize()]; // keep track of already matched students
-
-  for (int i = 0; i < staffData.getListSize(); ++i) {  // for each staff
-    Staff thisStaff = staffData.getStaff(i);
+  std::string* alreadyMatchedStudens = new std::string[studentData.getListSize()]; // keep track of already matched students, prevent student repeats
+  std::cout << "cycle " << cycle << ": ";
+  for (int i = 0; i < staffData.getListSize(); ++i) {  // for each (staff)
+    std::cout << ".";
+    Staff &thisStaff = staffData.getStaff(i);
     std::string thisStaffName = thisStaff.getName();
-    for (int j = 0; j < thisStaff.getMaxStudents(); ++j) { // for each wanted student
+
+    if (thisStaff.teacherIsFullMatched()) { // staff is full skup
+      continue;
+    }
+
+    // shuffle students to iterate through to prevent alphabetical prioratization
+    thisStaff.shuffleStudList();
+    for (int j = 0; j < thisStaff.getMaxSelectedStuds(); ++j) { // for each wanted student
       std::string attemptStudent = thisStaff.getStudentAtI(j);
+
+      if (thisStaff.getAmtOfMatchedStudents() > cycle - (i / equalityBias)) {
+        continue;
+      }
+
+      // makes this faster
       if (existsInStringList(attemptStudent, alreadyMatchedStudens, matchedStudentsI) || thisStaff.teacherIsFullMatched()) {
         continue;  // skip, student was already taken
       }
-      for (int k = 0; k < studentData.getListSize(); ++k) { // for each of all graduating students
-        Student thisStud = studentData.getStudentAtI(k);
-        if (thisStud.fullName == attemptStudent) {
-          //std::cout << thisStaffName << " wanted student " << thisStud.fullName << " found\n";
+
+      // shuffle to prevent prioratizing alphabetical order of student list
+      studentData.shuffleStudList();
+      for (int k = 0; k < studentData.getListSize(); ++k) { // for each of all (graduating students)
+        Student& thisStud = studentData.getStudentAtI(k);
+        if (thisStud.fullName == attemptStudent && !thisStaff.teacherIsFullMatched() && thisStud.matchedWithStaff.empty()) { // if student is wanted by the staff & staff is free
+
+          // makes sure student wants this staff too
           bool matchFound = false; // make sure student wants that staff member too
-          for (int l = 0; l < thisStud.totalStaffSelected; ++l) {  // for each staff student selected
+          for (int l = 0; l < thisStud.totalStaffSelected; ++l) { // for each staff student selected
             if (thisStud.selectedStaffs[l] == thisStaffName) {
               matchFound = true;
               break;
             }
           }
-          if (matchFound && !thisStaff.teacherIsFullMatched() && !existsInStringList(thisStud.fullName, alreadyMatchedStudens, matchedStudentsI)) {
-            std::cout << matchedStudentsI << " matched " << thisStaffName << " with " << thisStud.fullName << '\n';
+          if (matchFound && !existsInStringList(thisStud.fullName, alreadyMatchedStudens, matchedStudentsI)) {
             thisStaff.addMatchedStudent(thisStud.fullName);
+            thisStud.matchedWithStaff = thisStaffName;
 
             alreadyMatchedStudens[matchedStudentsI] = thisStud.fullName;
             ++matchedStudentsI;
@@ -593,6 +1180,18 @@ void pairStudentAndStaff(StaffData& staffData, StudentData& studentData) {
       }
     }
   }
+  std::cout << "#of students paired: " << matchedStudentsI << "\n";
+  if (matchedStudentsI == 0 && cycle > 1) {
+    break;
+  }
+  }
+  std::cout << "\n\n";
+  system("PAUSE");
+  system("CLS");
+  staffData.printPairings(studentData);
+
+  // not needed to free cuz strings free themselve prolly through their dconstruct
+  //delete alreadyMatchedStudens;
   system("PAUSE");
 }
 
@@ -617,18 +1216,24 @@ int main() {
   std::string stundetsFilePath = askForFilePath();
 
   parseStudentFileToData(studentData, stundetsFilePath);
+  locateMistakes(staffData, studentData);
 
   system("PAUSE");
 
   std::string input = "";
   do {
     system("CLS");
-    std::cout << " - grad halper menu - \n\n"
+    std::cout << " - grad halper menu -                       #of students: " << studentData.getListSize() << "\n"
+              << "                                            #of staff:    " << staffData.getListSize() << "\n"
               << "[1] display all staff\n"
               << "[2] display all students\n"
-              << "[3] calculate veritas results\n"
-              << "[4] pair student & staff\n"
-              << "[5] quit program\n"
+              << "[3] calculate veritas results\n";
+    setTxtColor(14);
+    std::cout << "[4] pair student & staff\n";
+    std::cout << "[5] setup waves\n";
+    setTxtColor(15);
+    std::cout << "[6] view pairings\n"
+              << "[q] quit program\n"
               << "\ninput: ";
     std::cin >> input;
     if (input == "1") {
@@ -645,9 +1250,17 @@ int main() {
       system("PAUSE");
     } else if (input == "4") {
       pairStudentAndStaff(staffData, studentData);
+    } else if (input == "5") {
+      setupWaves(staffData, studentData);
+    } else if (input == "6") {
+      system("CLS");
+      staffData.printPairings(studentData);
+      system("PAUSE");
     }
-  } while (input != "5");
+  } while (input != "q");
   //writeToCSV(staffData);
+
+  system("PAUSE");
   return 0;
 }
 
@@ -657,11 +1270,31 @@ void setTxtColor(int colorValue) {
   SetConsoleTextAttribute(hConsole, colorValue);
 }
 
+void toLowercase(std::string& input) {
+  for (char& c : input) {
+    if (c >= 'A' && c <= 'Z') {
+      c += 32;  // Convert uppercase letter to lowercase
+    }
+  }
+}
+
 // return a string of spaces of length amt given
 std::string addSpaces(int amt) {  // pseudo set w so i get to control it more
   std::string spaces = "";
   for (int i = 0; i < amt; ++i) {
     spaces += ' ';
+  }
+  return spaces;
+}
+
+std::string addSpacesButCool(int amt, int visualSize) {
+  std::string spaces = "";
+  for (int i = 0; i < amt; ++i) {
+    if (i < visualSize) {
+      spaces += '*';
+    } else {
+      spaces += ' ';
+    }
   }
   return spaces;
 }
