@@ -95,7 +95,7 @@ class StudentData {
     studentList[currentStudentCount] = stud;
     ++currentStudentCount;
   }
-  
+
   void shuffleStudList() {
     std::shuffle(studentList, studentList + totalGraduatingStuds, createRNG());
   }
@@ -106,7 +106,7 @@ class StudentData {
   }
 
   void printStudentData() {
-    std::cout << "#   | FULLNAME | #STAFF SELECTED | VERIDAS CHOICE\n";
+    std::cout << "#   | FULLNAME | #STAFF SELECTED | VERIDAS CHOICE | MATCHED STAFF\n";
     for (int i = 0; i < totalGraduatingStuds; ++i) {
       Student& thisStudent = studentList[i];
       std::cout << i + 1 << addSpaces(4 - getNumberDigitCount(i + 1))
@@ -114,7 +114,10 @@ class StudentData {
                 << addSpaces(longestStudentName - thisStudent.fullName.length())
                 << " | " << thisStudent.totalStaffSelected
                 << addSpaces(4 - getNumberDigitCount(thisStudent.totalStaffSelected))
-                << "| " << thisStudent.studentVoteForVeritas << '\n';
+                << "| " << thisStudent.studentVoteForVeritas 
+                 << addSpaces(longestStudentName-thisStudent.studentVoteForVeritas .length())
+                << "| " << thisStudent.matchedWithStaff
+                << '\n';
     }
   }
 
@@ -182,6 +185,7 @@ class StudentData {
 
 class Staff {
  private:
+  bool isWillingTakeAny = false;
   int popularity = 0; // how many times they are found on student list
   std::string name = "";
 
@@ -214,7 +218,12 @@ class Staff {
     if (matchedStudentsList != nullptr){
       for (int i = 0; i < currentStudentMatchCount; ++i) {
         Student& foundStud = studentData.getStudentFromName(matchedStudentsList[i]);
-        foundStud.matchedWithStaff = ""; // clear matched staff
+        if (foundStud.fullName != NULLSTUDENT.fullName) {
+          foundStud.matchedWithStaff = "";  // clear matched staff
+        } else {
+          std::cout << "\n" << name << "\n";
+          system("PAUSE");
+        }
       }
       delete[] matchedStudentsList;
       matchedStudentsList = nullptr;
@@ -264,6 +273,8 @@ class Staff {
   void setPopularity(int newpop) {
     popularity = newpop;
   };
+  void setIsWillingTakeAny(bool val) { isWillingTakeAny = val; };
+  bool getIsWillingTakeAny() { return isWillingTakeAny; };
   int getPopularity() { return popularity; };
   int getMaxSelectedStuds() { return studentListMaxSize; };
   int getMaxMatchingStudents() { return maxStudentsThisPersonCanStole; };
@@ -296,27 +307,44 @@ class StaffData {
 
   void sortStaffIndexs() {
     std::sort(staffList, staffList + currentSize, [](Staff& a, Staff& b) {
+      // sort open staff last
+      if (a.getIsWillingTakeAny() && !b.getIsWillingTakeAny()) {
+        return false;
+      }
+      if (!a.getIsWillingTakeAny() && b.getIsWillingTakeAny()) {
+        return true;
+      }
+      //
       return (a.getAmtOfMatchedStudents() - a.getPopularity() - a.getMaxMatchingStudents()) <
             (b.getAmtOfMatchedStudents() - b.getPopularity() - b.getMaxMatchingStudents());
     });
   }
 
   void sortStaffIndexsForEquality() {
+    //std::sort(staffList, staffList + currentSize, [](Staff& a, Staff& b) {
+    //  return a.getAmtOfMatchedStudents() + a.getPopularity() <
+    //         b.getAmtOfMatchedStudents() + b.getPopularity();
+    //});
     std::sort(staffList, staffList + currentSize, [](Staff& a, Staff& b) {
-      return a.getAmtOfMatchedStudents() + a.getPopularity() <
-             b.getAmtOfMatchedStudents() + b.getPopularity();
+      // sort open staff last
+      if (a.getIsWillingTakeAny() && !b.getIsWillingTakeAny()) {
+        return false;
+      }
+      if (!a.getIsWillingTakeAny() && b.getIsWillingTakeAny()) {
+        return true;
+      }
+      //
+      return a.getAmtOfMatchedStudents() + a.getPopularity()/10
+
+              <
+
+             b.getAmtOfMatchedStudents() + b.getPopularity()/10;
     });
   }
 
   void sortStaffIndexsByPopularity() { // sort by popularity first
     std::sort(staffList, staffList + currentSize, [](Staff& a, Staff& b) {
         return a.getPopularity() > b.getPopularity();
-    });
-  }
-
-  void sortByAmtStolling() {
-    std::sort(staffList, staffList + currentSize, [](Staff& a, Staff& b) {
-      return a.getAmtOfMatchedStudents() > b.getAmtOfMatchedStudents();
     });
   }
 
@@ -337,7 +365,7 @@ class StaffData {
     int pairedStudentsCounter = 0;
     std::cout << "\ntotal student count: " << totalStudentsCount << "\n";
     std::cout << "total staff count: " << currentSize << "\n\n";
-    sortByAmtStolling();
+    sortStaffIndexsByPopularity();
     for (int i = 0; i < currentSize; ++i) {
       Staff& thisStaff = staffList[i];
       int thisStaffMaxMatchedStudents = thisStaff.getMaxMatchingStudents();
@@ -423,14 +451,15 @@ class StaffData {
     setTxtColor(14);
     std::cout << "staff full name";
     setTxtColor(15);
-    std::cout << addSpaces(25-longestStaffName);
+    std::cout << addSpaces(29-longestStaffName);
     std::cout << " | ";
     setTxtColor(14);
     std::cout << "#selected students | max can stole | #students stolling | popularity";
     setTxtColor(15);
     std::cout << "\n";
 
-    sortByAmtStolling();
+    //sortByAmtStolling();
+    sortStaffIndexsByPopularity();
     for (int i = 0; i < currentSize; ++i) {
       Staff& thisStaff = staffList[i];
       std::cout << "  staff #" << i + 1 << addSpaces(3 - getNumberDigitCount(i + 1)) << "| ";
@@ -557,34 +586,10 @@ void parseStaffFileToData(StaffData& staffData, std::string staffFilePath) {
         std::cout << "[ERROR READING] staff csv - LESS THAN 4 COLUMNS" << '\n';
         exit(1);
       }
-      std::string firstName = words[3];
-      std::string lastName = words[2];
-
-      // count students
-      int wantedStudentsCount = 0;
-      for (int i = 4; i < dynamicArrSz; i+=2) {
-        if (i > dynamicArrSz) {
-          std::cout << "[ERROR READING] in staff csv - student name is odd (multiple names?)"<< '\n';
-          exit(1);
-        }
-        std::string studentLastName = words[i];
-        std::string studentFirstName = "";
-        if (i < dynamicArrSz) {
-          studentFirstName = words[i + 1];
-        }
-        removeWhitespace(studentFirstName);
-        removeQuotes(studentFirstName);
-        removeWhitespace(studentLastName);
-        removeQuotes(studentLastName);
-
-        replaceHyphens(studentFirstName);
-        keepFirstWord(studentFirstName);
-        replaceHyphens(studentLastName);
-        keepFirstWord(studentLastName);
-
-        if (!studentFirstName.empty() && !studentLastName.empty()) {
-          ++wantedStudentsCount;
-        }
+      std::string firstName = words[1];//words[3];
+      std::string lastName = words[0];//words[2];
+      if (lastName.empty() || firstName.empty()) {
+        continue;
       }
 
       Staff newStaff;
@@ -599,30 +604,62 @@ void parseStaffFileToData(StaffData& staffData, std::string staffFilePath) {
       keepFirstWord(lastName);
       std::string staffFullName = lastName + firstNameLastNameSeperator + firstName;
       newStaff.setName(staffFullName);
-      newStaff.createStudentStringList(wantedStudentsCount);
 
-      // set students
-      int countingStuds = 0;
-      for (int i = 4; i < dynamicArrSz; i += 2) {
-        std::string studentLastName = words[i];
-        std::string studentFirstName = "";
-        if (i < dynamicArrSz) {
-          studentFirstName = words[i + 1];
-        }
-        removeWhitespace(studentFirstName);
-        removeQuotes(studentFirstName);
-        removeWhitespace(studentLastName);
-        removeQuotes(studentLastName);
+      std::string word4 = words[4];
+      toLowercase(word4);
+      if (word4 == "any") {
+        newStaff.setIsWillingTakeAny(true);
+      } else {
+          // count students
+          int wantedStudentsCount = 0;
+          for (int i = 4; i < dynamicArrSz-1; i+=2) {
+            if (i > dynamicArrSz) {
+              std::cout << "[ERROR READING] in staff csv - student name is odd (multiple names?)"<< '\n';
+              exit(1);
+            }
+            std::string studentLastName = words[i];
+            std::string studentFirstName = "";
+            if (i < dynamicArrSz) {
+              studentFirstName = words[i + 1];
+            }
+            removeWhitespace(studentFirstName);
+            removeQuotes(studentFirstName);
+            removeWhitespace(studentLastName);
+            removeQuotes(studentLastName);
 
-        replaceHyphens(studentFirstName);
-        keepFirstWord(studentFirstName);
-        replaceHyphens(studentLastName);
-        keepFirstWord(studentLastName);
-        if (!studentFirstName.empty() && !studentLastName.empty()) {
-          std::string studentFullName = studentLastName + firstNameLastNameSeperator + studentFirstName;
-          newStaff.addStudent(studentFullName);
-          ++countingStuds;
-        }
+            replaceHyphens(studentFirstName);
+            keepFirstWord(studentFirstName);
+            replaceHyphens(studentLastName);
+            keepFirstWord(studentLastName);
+
+            if (!studentFirstName.empty() && !studentLastName.empty()) {
+              ++wantedStudentsCount;
+            }
+          }
+          newStaff.createStudentStringList(wantedStudentsCount);
+          // set students
+          int countingStuds = 0;
+          for (int i = 4; i < dynamicArrSz-1; i += 2) {
+            std::string studentLastName = words[i];
+            std::string studentFirstName = "";
+            if (i < dynamicArrSz) {
+              studentFirstName = words[i + 1];
+            }
+            removeWhitespace(studentFirstName);
+            removeQuotes(studentFirstName);
+            removeWhitespace(studentLastName);
+            removeQuotes(studentLastName);
+
+            replaceHyphens(studentFirstName);
+            keepFirstWord(studentFirstName);
+            replaceHyphens(studentLastName);
+            keepFirstWord(studentLastName);
+            if (!studentFirstName.empty() && !studentLastName.empty()) {
+              std::string studentFullName = studentLastName + firstNameLastNameSeperator + studentFirstName;
+              newStaff.addStudent(studentFullName);
+              ++countingStuds;
+            }
+          }
       }
 
       staffData.addStaff(newStaff);
@@ -890,6 +927,13 @@ void locateMistakes(StaffData& staffData, StudentData& studentData) {
         ++currentStudI;
       }
     };
+    if (thisStaff.getIsWillingTakeAny()) {
+        thisStaff.createStudentStringList(maxStudListSize);
+        for (int i = 0; i < maxStudListSize; ++i) {  // for each (student)
+            Student& thisStudent = studentData.getStudentAtI(i);
+            thisStaff.addStudent(thisStudent.fullName);
+        }
+    }
   }
 
   for (int i = 0; i < maxStudListSize; ++i) {  // for each (student)
@@ -899,7 +943,7 @@ void locateMistakes(StaffData& staffData, StudentData& studentData) {
       Staff& actualSelectedStaff = staffData.getStaffFromName(selectedStaff);
       if (actualSelectedStaff.getName() != NULLSTAFF.getName()) {
         actualSelectedStaff.setPopularity(actualSelectedStaff.getPopularity() + 1);
-      } 
+      }
       if (!existsInStringList(selectedStaff, allOfStudentwantedTeachers, currentStafI) && currentStafI < maxStudListSize) {
         if (actualSelectedStaff.getName() == NULLSTAFF.getName()) { // was not found on staff list
           std::cout << "(";
@@ -1009,13 +1053,6 @@ void locateMistakes(StaffData& staffData, StudentData& studentData) {
   }
 }
 
-void setupWaves(StaffData& staffData, StudentData& studentData) {
-  int maxStaffPerLine = 0;
-  system("CLS");
-  std::cout << "enter max staff per line: ";
-  std::cin >> maxStaffPerLine;
-}
-
 void pairStudentAndStaff(StaffData& staffData, StudentData& studentData) {
   int listSize = staffData.getListSize();
   for (int i = 0; i < listSize; ++i) {
@@ -1109,7 +1146,7 @@ void pairStudentAndStaff(StaffData& staffData, StudentData& studentData) {
       }
     }
   } while (secondInput != "s");
-  
+
   system("CLS");
   int equalityBias = 1;
   std::cout << "1 = prioratizes popular staff\n"
@@ -1120,6 +1157,11 @@ void pairStudentAndStaff(StaffData& staffData, StudentData& studentData) {
     equalityBias = 1;
   }
 
+  bool quitCycle = false;
+  do {
+    if (quitCycle) {
+      break;
+    }
   int cycleIncrement = 1;
   // multiple cycles to make sure all possible pairs are paired
   for (int cycle = 0; cycle < 1000; cycle+=cycleIncrement) { // two cycles, first only fits <= minPossiblNeededStudsForEachStaff then second cycle fills in all the other students
@@ -1137,7 +1179,7 @@ void pairStudentAndStaff(StaffData& staffData, StudentData& studentData) {
     Staff &thisStaff = staffData.getStaff(i);
     std::string thisStaffName = thisStaff.getName();
 
-    if (thisStaff.teacherIsFullMatched()) { // staff is full skup
+    if (thisStaff.teacherIsFullMatched()) { // staff is full skip
       continue;
     }
 
@@ -1181,6 +1223,8 @@ void pairStudentAndStaff(StaffData& staffData, StudentData& studentData) {
     }
   }
   std::cout << "#of students paired: " << matchedStudentsI << "\n";
+  //staffData.printAllStaff();
+  //system("PAUSE");
   if (matchedStudentsI == 0 && cycle > 1) {
     break;
   }
@@ -1190,6 +1234,70 @@ void pairStudentAndStaff(StaffData& staffData, StudentData& studentData) {
   system("CLS");
   staffData.printPairings(studentData);
 
+  setTxtColor(10);
+  std::cout << "\n[d] ";
+  setTxtColor(15);
+  std::cout << "Distribute Unpaired students to not-full staff"
+            << "\n[r] redo pairing";
+  setTxtColor(8);
+  std::cout << " (could lessen #of unpaired students)\n";
+  setTxtColor(15);
+  std::cout << "[c] continue\n\ninput: ";
+  std::cin >> secondInput;
+  if (secondInput == "c") {
+    quitCycle = true;
+  } else if (secondInput == "d") {
+    //std::cout << "DISTRIBUTING STUDENTS\n";
+    // loop to count total unpaired students
+    int unpairedCounter = 0;
+    for (int k = 0; k < studentData.getListSize(); ++k) {  // for each of all graduating students
+      Student& thisStud = studentData.getStudentAtI(k);
+      if (thisStud.matchedWithStaff == "" || thisStud.matchedWithStaff.empty()) { // this stud is unpaired
+          system("CLS");
+          setTxtColor(8);
+          ++unpairedCounter;
+          std::cout << " - unpaired student #" << unpairedCounter;
+          std::cout << " (" << thisStud.fullName << ")\n";
+          setTxtColor(15);
+          staffData.sortStaffIndexsForEquality(); // sort
+          bool studentPaired = false;
+          do {
+            for (int i = 0; i < staffData.getListSize(); ++i) {  // for each (staff)
+              Staff& thisStaff = staffData.getStaff(i);
+              std::string thisStaffName = thisStaff.getName();
+              if (thisStaff.teacherIsFullMatched() || studentPaired) {  // staff is full skip
+                continue;
+              }
+              std::cout << "pair (" << thisStud.fullName << ") with (";
+              setTxtColor(11);
+              std::cout << thisStaffName;
+              setTxtColor(15);
+              std::cout << ")\n";
+
+              std::cout << "agree?";
+              setTxtColor(8);
+              std::cout << "[y][n]: ";
+              setTxtColor(15);
+              std::string choice = "";
+              std::cin >> choice;
+              toLowercase(choice);
+              if (choice == "y") {
+                thisStud.matchedWithStaff = thisStaffName;
+                thisStaff.addMatchedStudent(thisStud.fullName);
+                studentPaired = true;
+              }
+            }
+          } while (studentPaired == false);
+      }
+    }
+  } else {
+    system("CLS");
+    for (int i = 0; i < staffData.getListSize(); ++i) {
+      Staff& thisStaff = staffData.getStaff(i);
+      thisStaff.updateMatchedStudentsList(thisStaff.getMaxMatchingStudents(), studentData);
+    };
+  }
+  } while (quitCycle == false);
   // not needed to free cuz strings free themselve prolly through their dconstruct
   //delete alreadyMatchedStudens;
   system("PAUSE");
@@ -1223,6 +1331,7 @@ int main() {
   std::string input = "";
   do {
     system("CLS");
+    std::cin.clear();
     std::cout << " - grad halper menu -                       #of students: " << studentData.getListSize() << "\n"
               << "                                            #of staff:    " << staffData.getListSize() << "\n"
               << "[1] display all staff\n"
@@ -1230,9 +1339,8 @@ int main() {
               << "[3] calculate veritas results\n";
     setTxtColor(14);
     std::cout << "[4] pair student & staff\n";
-    std::cout << "[5] setup waves\n";
     setTxtColor(15);
-    std::cout << "[6] view pairings\n"
+    std::cout << "[5] view pairings\n"
               << "[q] quit program\n"
               << "\ninput: ";
     std::cin >> input;
@@ -1251,8 +1359,6 @@ int main() {
     } else if (input == "4") {
       pairStudentAndStaff(staffData, studentData);
     } else if (input == "5") {
-      setupWaves(staffData, studentData);
-    } else if (input == "6") {
       system("CLS");
       staffData.printPairings(studentData);
       system("PAUSE");
@@ -1290,7 +1396,7 @@ std::string addSpaces(int amt) {  // pseudo set w so i get to control it more
 std::string addSpacesButCool(int amt, int visualSize) {
   std::string spaces = "";
   for (int i = 0; i < amt; ++i) {
-    if (i < visualSize) {
+    if ((amt-1)-i < visualSize) {
       spaces += '*';
     } else {
       spaces += ' ';
