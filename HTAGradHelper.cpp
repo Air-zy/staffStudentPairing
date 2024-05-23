@@ -114,7 +114,7 @@ class StudentData {
                 << addSpaces(longestStudentName - thisStudent.fullName.length())
                 << " | " << thisStudent.totalStaffSelected
                 << addSpaces(4 - getNumberDigitCount(thisStudent.totalStaffSelected))
-                << "| " << thisStudent.studentVoteForVeritas 
+                << "| " << thisStudent.studentVoteForVeritas
                  << addSpaces(longestStudentName-thisStudent.studentVoteForVeritas .length())
                 << "| " << thisStudent.matchedWithStaff
                 << '\n';
@@ -198,15 +198,34 @@ class Staff {
   // max size should be ^ maxStudentsThisPersonCanStole
   int currentStudentMatchCount = 0;
   std::string* matchedStudentsList = nullptr;  // dynamic array of matched students
-
+  std::string forcePairedStudents[100];
+  int forcePairCount = 0;
  public:
 
   // Constructor
-   Staff() {}
+  Staff() {
+    for (int i = 0; i < 100; ++i) {
+      forcePairedStudents[i] = "";
+    }
+  }
 
   // Destructor
   ~Staff() {
     // strings deallocate themselves already so no need to delete string list
+  }
+
+  bool isForcePair(std::string name) {
+    for (int i = 0; i < forcePairCount; ++i) {
+      if (forcePairedStudents[i] == name) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void addForcePair(std::string name) {
+    forcePairedStudents[forcePairCount] = name;
+    ++forcePairCount;
   }
 
   void shuffleStudList() {
@@ -219,10 +238,12 @@ class Staff {
       for (int i = 0; i < currentStudentMatchCount; ++i) {
         Student& foundStud = studentData.getStudentFromName(matchedStudentsList[i]);
         if (foundStud.fullName != NULLSTUDENT.fullName) {
-          foundStud.matchedWithStaff = "";  // clear matched staff
+          if (!isForcePair(foundStud.fullName)) {
+            foundStud.matchedWithStaff = "";  // clear matched staff
+          }
         } else {
-          std::cout << "\n" << name << "\n";
-          system("PAUSE");
+          //std::cout << "\n" << name << "\n";
+          //system("PAUSE");
         }
       }
       delete[] matchedStudentsList;
@@ -230,9 +251,16 @@ class Staff {
     }
     maxStudentsThisPersonCanStole = 0;  //  reset
     currentStudentMatchCount = 0;
-
     maxStudentsThisPersonCanStole = matchStudentListSize;
     matchedStudentsList = new std::string[maxStudentsThisPersonCanStole];
+
+    for (int i = 0; i < forcePairCount; ++i) {
+      addMatchedStudent(forcePairedStudents[i]);
+      Student& foundStud = studentData.getStudentFromName(forcePairedStudents[i]);
+      foundStud.matchedWithStaff = name;
+      //std::cout << "force added: " << forcePairedStudents[i] << '\n';
+      //system("PAUSE");
+    }
     //std::cout << "set " << name << " maxcanstole: " << maxStudentsThisPersonCanStole << '\n';
   }
 
@@ -348,6 +376,15 @@ class StaffData {
     });
   }
 
+  void sortByAmtStollingAndName() {
+    std::sort(staffList, staffList + currentSize, [](Staff& a, Staff& b) {
+        if (a.getAmtOfMatchedStudents() == b.getAmtOfMatchedStudents()) {
+            return a.getName() < b.getName();
+        }
+        return a.getAmtOfMatchedStudents() < b.getAmtOfMatchedStudents();
+    });
+  }
+
   void addStaff(Staff &newStaff) {
     staffList[currentSize] = newStaff;
     if (newStaff.getName().empty()) {
@@ -358,6 +395,16 @@ class StaffData {
       longestStaffName = newStaff.getName().length();
     }
     ++currentSize;
+  }
+
+  int countPairs(StudentData& studentData) {
+      int pairedStudentsCounter = 0;
+      for (int i = 0; i < currentSize; ++i) {
+          for (int j = 0; j < staffList[i].getAmtOfMatchedStudents(); ++j) {
+            ++pairedStudentsCounter;
+          }
+      }
+      return pairedStudentsCounter;
   }
 
   void printPairings(StudentData& studentData) {
@@ -839,13 +886,9 @@ void parseStudentFileToData(StudentData &studentData, std::string staffFilePath)
 
 std::string askForFilePath() {
   std::string filePath = "";
-  //std::cin.ignore(1000, '\n');  // flush the buffer
-
   std::getline(std::cin, filePath);
   removeWhitespace(filePath);
   removeQuotes(filePath);
-
-  //std::cin.ignore(1000, '\n');  // flush the buffer
   return filePath;
 }
 
@@ -1065,7 +1108,7 @@ void pairStudentAndStaff(StaffData& staffData, StudentData& studentData) {
     system("CLS");
     std::cout << "  - student/staff pairing -\n\n"
               << "[1] force pair specified teacher with specified student\n"
-              << "[2] set #of students of staff by POPULARITY\n"
+              << "[2] set #of students per staff by POPULARITY\n"
               << "[3] manually set #of students for each staff can stole";
     setTxtColor(8);
     std::cout << " (tedious)\n";
@@ -1106,6 +1149,7 @@ void pairStudentAndStaff(StaffData& staffData, StudentData& studentData) {
         Student& thisStudent = studentData.getStudentFromName(studentInput);
         if (thisStudent.fullName != NULLSTUDENT.fullName) {
           thisStudent.matchedWithStaff = thisStaff.getName();
+          thisStaff.addForcePair(thisStudent.fullName);
           thisStaff.addMatchedStudent(studentInput);
         } else {
           std::cout << "[Error] student (" << studentInput << ") was not found\n";
@@ -1157,11 +1201,19 @@ void pairStudentAndStaff(StaffData& staffData, StudentData& studentData) {
     equalityBias = 1;
   }
 
+  int recycleLowestPairCount = 9999;
+  bool isRecycling = false;
+
   bool quitCycle = false;
   do {
     if (quitCycle) {
       break;
     }
+    for (int i = 0; i < studentData.getListSize(); ++i) {
+      Student& thisStud = studentData.getStudentAtI(i);
+      thisStud.matchedWithStaff = "";
+    };
+  int overallPairedCount = 0;
   int cycleIncrement = 1;
   // multiple cycles to make sure all possible pairs are paired
   for (int cycle = 0; cycle < 1000; cycle+=cycleIncrement) { // two cycles, first only fits <= minPossiblNeededStudsForEachStaff then second cycle fills in all the other students
@@ -1225,12 +1277,28 @@ void pairStudentAndStaff(StaffData& staffData, StudentData& studentData) {
   std::cout << "#of students paired: " << matchedStudentsI << "\n";
   //staffData.printAllStaff();
   //system("PAUSE");
+  overallPairedCount += matchedStudentsI;
   if (matchedStudentsI == 0 && cycle > 1) {
     break;
   }
   }
+
+  int totalUnpaired = studentData.getListSize()-overallPairedCount;
+  std::cout << "overAllPaird: " << overallPairedCount << " / " << studentData.getListSize() << " = " << totalUnpaired << ", lowest: " << recycleLowestPairCount << "\n";
+  if (totalUnpaired < recycleLowestPairCount) {
+    recycleLowestPairCount = totalUnpaired;
+  } else {
+      if (isRecycling && totalUnpaired != 0) { // && if solved
+        for (int i = 0; i < staffData.getListSize(); ++i) {
+          Staff& thisStaff = staffData.getStaff(i);
+          thisStaff.updateMatchedStudentsList(thisStaff.getMaxMatchingStudents(), studentData);
+        };
+        continue;
+      }
+  }
+
   std::cout << "\n\n";
-  system("PAUSE");
+  //system("PAUSE");
   system("CLS");
   staffData.printPairings(studentData);
 
@@ -1258,10 +1326,27 @@ void pairStudentAndStaff(StaffData& staffData, StudentData& studentData) {
           ++unpairedCounter;
           std::cout << " - unpaired student #" << unpairedCounter;
           std::cout << " (" << thisStud.fullName << ")\n";
+          for (int w = 0; w < thisStud.totalStaffSelected; ++w) {
+            std::cout << "chose staff: " << thisStud.selectedStaffs[w] << "\n";
+          }
           setTxtColor(15);
           staffData.sortStaffIndexsForEquality(); // sort
           bool studentPaired = false;
           do {
+            int possiblStaffToMatchWith = 0;
+            for (int i = 0; i < staffData.getListSize(); ++i) {  // for each (staff)
+                Staff& thisStaff = staffData.getStaff(i);
+                std::string thisStaffName = thisStaff.getName();
+                if (thisStaff.teacherIsFullMatched() || studentPaired) {  // staff is full skip
+                continue;
+                }
+                ++possiblStaffToMatchWith;
+            }
+            if (possiblStaffToMatchWith == 0) { // escape prison of having no pair :(
+                std::cout << " - all staff are full, cant pair any more students :(\n";
+                system("PAUSE");
+                break;
+            }
             for (int i = 0; i < staffData.getListSize(); ++i) {  // for each (staff)
               Staff& thisStaff = staffData.getStaff(i);
               std::string thisStaffName = thisStaff.getName();
@@ -1290,7 +1375,12 @@ void pairStudentAndStaff(StaffData& staffData, StudentData& studentData) {
           } while (studentPaired == false);
       }
     }
+    setTxtColor(10);
+    std::cout << "\nPAIRED " << unpairedCounter << " Students\n";
+    setTxtColor(15);
+    quitCycle = true;
   } else {
+    isRecycling = true;
     system("CLS");
     for (int i = 0; i < staffData.getListSize(); ++i) {
       Staff& thisStaff = staffData.getStaff(i);
@@ -1300,6 +1390,48 @@ void pairStudentAndStaff(StaffData& staffData, StudentData& studentData) {
   } while (quitCycle == false);
   // not needed to free cuz strings free themselve prolly through their dconstruct
   //delete alreadyMatchedStudens;
+  system("PAUSE");
+}
+
+void exportResults(StaffData& staffData, StudentData& studentData) {
+  std::cout << " - Exporting Results -\n\nProgram will make the file(pairingResults.csv) if none is entered\n";
+  std::cout << "\nenter ";
+  setTxtColor(3);
+  std::cout << "csv ";
+  setTxtColor(15);
+
+  std::cout << "file_path to ";
+  setTxtColor(3);
+  std::cout << "export to";
+  setTxtColor(15);
+  std::cout << ": ";
+
+  std::cin.ignore(1000, '\n');
+  std::string ExportFilePath = askForFilePath();
+
+  if (ExportFilePath.empty()) {
+    ExportFilePath = "pairingResults.csv";
+  }
+  std::ofstream file(ExportFilePath);
+  if (file.fail()) {
+    std::cout << "[ERROR WRITING] " << ExportFilePath << '\n';
+    system("PAUSE");
+    //exit(1);
+  };
+  file << "Last Name, First Name, #paired, students\n";
+  staffData.sortByAmtStollingAndName();
+  for (int i = 0; i < staffData.getListSize(); ++i) {
+      Staff& thisStaff = staffData.getStaff(i);
+      std::string fullName = thisStaff.getName();
+      removeWhitespace(fullName);
+      file << fullName << ',' << thisStaff.getAmtOfMatchedStudents() << ',';
+      for (int j = 0; j < thisStaff.getAmtOfMatchedStudents(); ++j) {
+        std::string thisStud = thisStaff.getMatchedStudentAtI(j);
+        //file << '"' << thisStud << '"' << ',';
+        file << thisStud << ',';
+      }
+      file << '\n';
+  }
   system("PAUSE");
 }
 
@@ -1331,17 +1463,24 @@ int main() {
   std::string input = "";
   do {
     system("CLS");
+    int countedPairs = staffData.countPairs(studentData);
+    int studentCount = studentData.getListSize();
     std::cin.clear();
-    std::cout << " - grad halper menu -                       #of students: " << studentData.getListSize() << "\n"
-              << "                                            #of staff:    " << staffData.getListSize() << "\n"
-              << "[1] display all staff\n"
+    std::cout << " - grad halper menu -                                 #of students: " << studentCount << "\n"
+              << "                                                      #of staff:    " << staffData.getListSize() << "\n"
+              << "[1] display all staff                                 #pairs made:  " << countedPairs << "\n"
               << "[2] display all students\n"
               << "[3] calculate veritas results\n";
     setTxtColor(14);
     std::cout << "[4] pair student & staff\n";
     setTxtColor(15);
-    std::cout << "[5] view pairings\n"
-              << "[q] quit program\n"
+    if (countedPairs == studentCount) {
+        setTxtColor(10);
+    }
+    std::cout << "[5] view pairings\n";
+    std::cout << "[6] export result data\n";
+    setTxtColor(15);
+    std::cout << "[q] quit program\n"
               << "\ninput: ";
     std::cin >> input;
     if (input == "1") {
@@ -1362,6 +1501,9 @@ int main() {
       system("CLS");
       staffData.printPairings(studentData);
       system("PAUSE");
+    } else if (input == "6") {
+      system("CLS");
+      exportResults(staffData, studentData);
     }
   } while (input != "q");
   //writeToCSV(staffData);
